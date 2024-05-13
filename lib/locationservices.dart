@@ -1,131 +1,149 @@
 import 'package:flutter/material.dart';
-import 'package:geocode/geocode.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert'; // For jsonDecode
 import 'package:geocoding/geocoding.dart';
 import 'dart:math';
 import 'package:location_sorting/model/address.dart' as customAddress;
-import 'package:location_sorting/model/address_with_distance.dart';
-import 'package:location_sorting/model/storage_unit.dart';
-import 'package:location_sorting/model/locations.dart';
 
+import 'package:location_sorting/model/locations.dart';
 
 //Now compute the distance
 //Associate Address Object with Lat and Long
 
+//ignore: must_be_immutable
 class LocationServices extends StatefulWidget {
-  LocationServices({super.key}); // Removed 'const' because of non-final fields
+  LocationServices({super.key});
 
-  double? sourceLattitude; // Nullable values
+  double? sourceLattitude;
   double? sourceLongitude;
 
-  static final Map<double, double> storageLocationLatAndLong = {}; // Changed to double
-
-  final double storageDestinationLatitude = 37.42041172519378;
-  final double storageDestinationLongitude = -122.0978101094947;
+  //static final Map<double, double> storageLocationLatAndLong = {};
 
   @override
   State<LocationServices> createState() => _LocationServicesState();
 }
 
 class _LocationServicesState extends State<LocationServices> {
-
   List<double> sortedListWrtKm = [];
+  Map<double, customAddress.Address>
+      mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit = {};
 
   @override
   void initState() {
     super.initState();
-    mainOperation(); // Perform some geocoding tasks
-    
-    //loadJsonData();
+    mainOperation();
   }
 
   mainOperation() async {
-    debugPrint("Inside checkingGeoCode");
-    getCurrentLocationOfTheUser(); 
-    int distanceFromUserToUnit = 0;
-    
-    List<Location> storageUnitLocations = [];
-    List<AddressWithDistance> addressWithDistances = []; // To store address-distance pairs
-  
-    List<Locations> storageUnitLatAndLng = [];
-    Map<StorageUnit, double> map = {};
+    getCurrentLocationOfTheUser();
 
-    List<customAddress.Address> addresses = await getCustomAddressQuery();
-    debugPrint("Address List length: ${addresses.length}");
-    for(customAddress.Address address in addresses) {
+    List<Location> storageUnitLocations = [];
+
+    List<Locations> storageUnitLatAndLng = [];
+
+    List<customAddress.Address> addresses = await constructAddressObject();
+
+    //debugPrint("Address List length: ${addresses.length}");
+
+    for (customAddress.Address address in addresses) {
       //debugPrint("Custom address query that will be sent later: ${address.formattedAddressString}");
 
-
       try {
-      storageUnitLocations = await getStorageUnitLocationsForwardGeoCoding(address.formattedAddressString);
-      //storageUnitLatAndLng
+        storageUnitLocations = await getStorageUnitLocationsByForwardGeoCoding(
+            address.formattedAddressString);
 
-      //Locations(address.latitude, storageUnitLocations.longitude);
+        //Locations(address.latitude, storageUnitLocations.longitude);
         //print("Storage Units lat and lng: ${storageUnitLocations.first.latitude} ${storageUnitLocations.first.longitude}");
-        Locations newLocation = Locations(storageUnitLocations.first.latitude, storageUnitLocations.first.longitude, address);
+        Locations newLocation = Locations(storageUnitLocations.first.latitude,
+            storageUnitLocations.first.longitude, address);
         storageUnitLatAndLng.add(newLocation);
-      } catch(e) {
-          print("The address was not according to the desired format!");
+      } catch (e) {
+        debugPrint(
+            "Some of the address fields were not according to the desired format!");
       }
-        //debugPrint("${storageUnitLatAndLng.length}");
+      //debugPrint("${storageUnitLatAndLng.length}");
     }
 
-    for(int i = 0 ; i<storageUnitLatAndLng.length ; i++) {
+    for (int i = 0; i < storageUnitLatAndLng.length; i++) {
       //print("${storageUnitLatAndLng[i].latitude} ${storageUnitLatAndLng[i].longitude} mapped to address ${storageUnitLatAndLng[i].storageAddress.address}");
 
-      double distance = findDistanceBetweenUserToStorage(widget.sourceLattitude as double, widget.sourceLongitude as double,storageUnitLatAndLng[i].latitude, storageUnitLatAndLng[i].longitude);
-      //AddressWithDistance newEntry = AddressWithDistance(address, distance);
+      findDistanceBetweenUserToStorage(widget.sourceLattitude!,
+          widget.sourceLongitude!, storageUnitLatAndLng[i]);
     }
-
     sortedListWrtKm.sort((a, b) => a.compareTo(b));
+    // for (double value in sortedListWrtKm) {
+    //   debugPrint("Distance from user to storage: $value km");
+    // }
 
-    for (double value in sortedListWrtKm) {
-        print("Distance from user to storage in sorted manner: ${value}");
+    //Iterate Over the Map..
+    // Sort the map entries based on distance in ascending order\
+
+    var sortedEntries =
+        mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.entries
+            .toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
+
+    // Clear the existing map
+    mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.clear();
+
+    // Reconstruct the map from the sorted entries
+    for (var entry in sortedEntries) {
+      mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit[entry.key] =
+          entry.value;
     }
 
-    /*1234 South Main Street, Santa Ana, CA 92707 Santa Ana California United States */
-    //List<Location> locations = await locationFromAddress("1234 Main St, Irvine, CA 92614");
-    //debugPrint("Storage unit Location from checkingGeoCode: $locations");
+    // Iterate over the sorted map and print or process as needed
+    for (var entry
+        in mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit
+            .entries) {
+      double distance = entry.key;
+      customAddress.Address address = entry.value;
+
+      debugPrint(
+          "Distance: $distance km, Address: ${address.formattedAddressString}");
     }
+  }
 
+  //Future<List<Location>>
+  Future<List<Location>> getStorageUnitLocationsByForwardGeoCoding(
+      String customAddressQuery) async {
+    List<Location> locations = await locationFromAddress(customAddressQuery);
+    //debugPrint("Lat and Long obtained from the locationFromAddress method: $locations");
+    return locations;
+  }
 
-    //Future<List<Location>>
-    Future<List<Location>> getStorageUnitLocationsForwardGeoCoding(String customAddressQuery) async {
-        List<Location> locations = await locationFromAddress(customAddressQuery);
-        //debugPrint("Lat and Long obtained from the locationFromAddress method: $locations");
-        return locations;
-    }
+  Future<List<customAddress.Address>> constructAddressObject() async {
+    List<customAddress.Address> addressList = [];
 
-    Future<List<customAddress.Address>> getCustomAddressQuery() async {
-  List<customAddress.Address> addressList = [];
+    try {
+      final jsonString = await rootBundle.loadString('assets/prop.json');
+      final jsonObject = jsonDecode(jsonString);
 
-  try {
-    final jsonString = await rootBundle.loadString('assets/prop.json');
-    final jsonObject = jsonDecode(jsonString);
+      if (jsonObject['data']['admin'].containsKey('Properties')) {
+        var properties = jsonObject['data']['admin']['Properties'];
+        for (var property in properties) {
+          if (property.containsKey('Address')) {
+            var addressJson =
+                property['Address']; // this is expected to be a map
 
-    if (jsonObject['data']['admin'].containsKey('Properties')) {
-      var properties = jsonObject['data']['admin']['Properties'];
-      for (var property in properties) {
-        if (property.containsKey('Address')) {
-          var addressJson = property['Address']; // this is expected to be a map
-
-          // Log the raw data to see what you're working with
+            // Logging the raw data
             //debugPrint("Raw Address Data: $addressJson");
 
-          customAddress.Address newAddress = customAddress.Address.fromJson(addressJson); // Ensure conversion to Address
-          addressList.add(newAddress); // Add to list only if correctly converted
+            customAddress.Address newAddress =
+                customAddress.Address.fromJson(addressJson);
+
+            addressList.add(newAddress);
+          }
         }
+      } else {
+        debugPrint("No 'Properties' key found in the JSON data.");
       }
-    } else {
-      debugPrint("No 'Properties' key found in the JSON data.");
+    } catch (e) {
+      debugPrint("Error loading JSON data: $e");
     }
-  } catch (e) {
-    debugPrint("Error loading JSON data: $e");
+    return addressList;
   }
-  return addressList;
-}
 
   Future<void> getCurrentLocationOfTheUser() async {
     LocationPermission permission = await Geolocator.checkPermission();
@@ -144,32 +162,23 @@ class _LocationServicesState extends State<LocationServices> {
       });
 
       debugPrint("Latitude coordinate of the user = ${widget.sourceLattitude}");
-      debugPrint("Longitude coordinate of the user = ${widget.sourceLongitude}");
-
-      // if (widget.sourceLattitude != null && widget.sourceLongitude != null) {
-      //   findDistanceBetweenSourceToStorage(
-      //     widget.sourceLattitude!,
-      //     widget.sourceLongitude!,
-      //     widget.storageDestinationLatitude,
-      //     widget.storageDestinationLongitude
-      //   );
-        
-      // } else {
-      //   debugPrint("Source coordinates are not yet available.");
-      // }
+      debugPrint(
+          "Longitude coordinate of the user = ${widget.sourceLongitude}");
     }
   }
 
-  double findDistanceBetweenUserToStorage(double lat1, double lon1, double lat2, double lon2) {
+  double findDistanceBetweenUserToStorage(
+      double lat1, double lon1, Locations storageUnitLoc) {
     const r = 6372.8; // Earth radius in kilometers
 
     //debugPrint("Inside findDistanceBetweenSourceToStorage");
-    final dLat = _toRadians(lat2 - lat1);
-    final dLon = _toRadians(lon2 - lat1);
+    final dLat = _toRadians(storageUnitLoc.latitude - lat1);
+    final dLon = _toRadians(storageUnitLoc.longitude - lat1);
     final lat1Radians = _toRadians(lat1);
-    final lat2Radians = _toRadians(lat2);
+    final lat2Radians = _toRadians(storageUnitLoc.latitude);
 
-    final a = _haversin(dLat) + cos(lat1Radians) * cos(lat2Radians) * _haversin(dLon);
+    final a =
+        _haversin(dLat) + cos(lat1Radians) * cos(lat2Radians) * _haversin(dLon);
     final c = 2 * asin(sqrt(a));
 
     double distance = r * c;
@@ -177,11 +186,14 @@ class _LocationServicesState extends State<LocationServices> {
     //debugPrint("Distance between user to storage unit: ${r * c} km");
     sortedListWrtKm.add(r * c);
 
+    mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit[distance] =
+        storageUnitLoc.storageAddress;
+
+    debugPrint("\n");
     return distance;
   }
 
   double _toRadians(double degrees) => degrees * (pi / 180);
-
   double _haversin(double radians) => pow(sin(radians / 2), 2) as double;
 
   @override
@@ -201,7 +213,4 @@ class _LocationServicesState extends State<LocationServices> {
   }
 }
 
-
-
-
-//operable
+//Operable
