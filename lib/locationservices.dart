@@ -179,11 +179,33 @@ class _LocationServicesState extends State<LocationServices> {
         title: const Text("Location"),
         centerTitle: true,
       ),
-      body: Center(
-        child: ElevatedButton(
-          onPressed: getCurrentLocationOfTheUser,
-          child: const Text("Grab location"),
-        ),
+      body: ListView.builder(
+        itemCount:
+            mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.length,
+        itemBuilder: (context, index) {
+          // Extract distance and property from map entry at given index
+          double distance =
+              mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.keys
+                  .elementAt(index);
+          Properties property =
+              mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit
+                  .values
+                  .elementAt(index);
+
+          // Return a ListTile representing the current entry
+          return ListTile(
+            // Display distance in the title
+            title: Text("Distance: $distance km"),
+            // Display address details in the subtitle
+            subtitle: Text(
+              "Property Details: Property ID: ${property.id}, ${property.name}",
+            ),
+            // Handle onTap event if needed
+            onTap: () {
+              // You can add functionality here to handle tap events on the list items
+            },
+          );
+        },
       ),
     );
   }
