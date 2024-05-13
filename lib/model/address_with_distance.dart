@@ -1,4 +1,5 @@
 import 'package:location_sorting/model/address.dart';
+import 'package:location_sorting/model/properties.dart';
 
 class AddressWithDistance {
   final Address address;

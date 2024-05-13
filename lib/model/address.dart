@@ -1,4 +1,3 @@
-
 class Address {
   final String id;
   final String address;
@@ -15,6 +14,23 @@ class Address {
   final String region;
   final String created_at;
   final String modified_at;
+
+  Address.empty()
+      : id = '',
+        address = '',
+        address2 = '',
+        city = '',
+        state = '',
+        neighborhood = '',
+        zip = '',
+        country = '',
+        lat = 0.0,
+        lng = 0.0,
+        formatted_address = '',
+        district = '',
+        region = '',
+        created_at = '',
+        modified_at = '';
 
   Address({
     required this.id,
@@ -33,9 +49,6 @@ class Address {
     required this.created_at,
     required this.modified_at,
   });
-
-
-
 
   factory Address.fromJson(Map<String, dynamic> json) {
     return Address(
@@ -61,6 +74,4 @@ class Address {
   String get formattedAddressString {
     return '${address ?? ""}, ${city ?? ""}, ${state ?? ""} ${zip ?? ""}';
   }
-
 }
-

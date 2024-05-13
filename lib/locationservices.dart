@@ -9,7 +9,7 @@ import 'package:location_sorting/model/address.dart' as customAddress;
 
 import 'package:location_sorting/model/locations.dart';
 
-import 'package:workmanager/workmanager.dart';
+import 'package:location_sorting/model/properties.dart';
 
 const fetchBackground = "fetchBackground";
 
@@ -26,7 +26,7 @@ class LocationServices extends StatefulWidget {
 
 class _LocationServicesState extends State<LocationServices> {
   List<double> sortedListWrtKm = [];
-  Map<double, customAddress.Address>
+  Map<double, Properties>
       mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit = {};
 
   List<Location> storageUnitLocations = [];
@@ -42,18 +42,20 @@ class _LocationServicesState extends State<LocationServices> {
   mainOperation() async {
     getCurrentLocationOfTheUser();
 
-    List<customAddress.Address> addresses = await constructAddressObject();
+    List<Properties> properties = await constructPropertiesObject();
 
     //debugPrint("Address List length: ${addresses.length}");
 
-    for (customAddress.Address address in addresses) {
+    for (Properties property in properties) {
       //debugPrint("Custom address query that will be sent later: ${address.formattedAddressString}");
+
+      customAddress.Address address = property.address;
 
       try {
         storageUnitLocations = await getStorageUnitLocationsByForwardGeoCoding(
             address.formattedAddressString);
         Locations newLocation = Locations(storageUnitLocations.first.latitude,
-            storageUnitLocations.first.longitude, address);
+            storageUnitLocations.first.longitude, property);
         storageUnitLatAndLng.add(newLocation);
       } catch (e) {
         debugPrint(
@@ -77,29 +79,27 @@ class _LocationServicesState extends State<LocationServices> {
     return locations;
   }
 
-  Future<List<customAddress.Address>> constructAddressObject() async {
-    List<customAddress.Address> addressList = [];
+  Future<List<Properties>> constructPropertiesObject() async {
+    List<Properties> propertiesList = [];
 
     try {
       final jsonString = await rootBundle.loadString('assets/prop.json');
       final jsonObject = jsonDecode(jsonString);
 
       if (jsonObject['data']['admin'].containsKey('Properties')) {
-        var properties = jsonObject['data']['admin']['Properties'];
-        for (var property in properties) {
-          debugPrint("Property file contents: $property");
+        var propertiesData = jsonObject['data']['admin']['Properties'];
+        for (var propertyData in propertiesData) {
+          if (propertyData.containsKey('Address')) {
+            var addressJson = propertyData['Address'];
+            var propertyJson = propertyData;
+            propertyJson.remove('Address');
 
-          if (property.containsKey('Address')) {
-            var addressJson =
-                property['Address']; // this is expected to be a map
-
-            // Logging the raw data
-            //debugPrint("Raw Address Data: $addressJson");
-
-            customAddress.Address newAddress =
+            customAddress.Address address =
                 customAddress.Address.fromJson(addressJson);
+            Properties properties = Properties.fromJson(propertyJson);
+            properties.address = address;
 
-            addressList.add(newAddress);
+            propertiesList.add(properties);
           }
         }
       } else {
@@ -108,7 +108,8 @@ class _LocationServicesState extends State<LocationServices> {
     } catch (e) {
       debugPrint("Error loading JSON data: $e");
     }
-    return addressList;
+
+    return propertiesList;
   }
 
   Future<void> getCurrentLocationOfTheUser() async {
@@ -140,7 +141,7 @@ class _LocationServicesState extends State<LocationServices> {
         storageUnitLoc.latitude, storageUnitLoc.longitude, "kilometers");
 
     mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit[distance] =
-        storageUnitLoc.storageAddress;
+        storageUnitLoc.property;
     return distance;
   }
 
@@ -164,10 +165,10 @@ class _LocationServicesState extends State<LocationServices> {
         in mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit
             .entries) {
       double distance = entry.key;
-      customAddress.Address address = entry.value;
+      Properties property = entry.value;
 
       debugPrint(
-          "Distance: $distance km, Address: ${address.formattedAddressString}");
+          "Distance: $distance km, Property ID: ${property.id}, Address: ${property.address.address}, ${property.address.city}, ${property.address.state}, ${property.address.zip}");
     }
   }
 
