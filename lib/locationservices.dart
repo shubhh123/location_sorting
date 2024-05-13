@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map_math/flutter_geo_math.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert'; // For jsonDecode
@@ -169,27 +170,35 @@ class _LocationServicesState extends State<LocationServices> {
 
   double findDistanceBetweenUserToStorage(
       double lat1, double lon1, Locations storageUnitLoc) {
-    const r = 6372.8; // Earth radius in kilometers
+    // const r = 6372.8; // Earth radius in kilometers
 
-    //debugPrint("Inside findDistanceBetweenSourceToStorage");
-    final dLat = _toRadians(storageUnitLoc.latitude - lat1);
-    final dLon = _toRadians(storageUnitLoc.longitude - lat1);
-    final lat1Radians = _toRadians(lat1);
-    final lat2Radians = _toRadians(storageUnitLoc.latitude);
+    // //debugPrint("Inside findDistanceBetweenSourceToStorage");
+    // final dLat = _toRadians(storageUnitLoc.latitude - lat1);
+    // final dLon = _toRadians(storageUnitLoc.longitude - lat1);
+    // final lat1Radians = _toRadians(lat1);
+    // final lat2Radians = _toRadians(storageUnitLoc.latitude);
 
-    final a =
-        _haversin(dLat) + cos(lat1Radians) * cos(lat2Radians) * _haversin(dLon);
-    final c = 2 * asin(sqrt(a));
+    // final a =
+    //     _haversin(dLat) + cos(lat1Radians) * cos(lat2Radians) * _haversin(dLon);
+    // final c = 2 * asin(sqrt(a));
 
-    double distance = r * c;
+    // double distance = r * c;
 
-    //debugPrint("Distance between user to storage unit: ${r * c} km");
-    sortedListWrtKm.add(r * c);
+    // //debugPrint("Distance between user to storage unit: ${r * c} km");
+    // sortedListWrtKm.add(r * c);
+
+    // mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit[distance] =
+    //     storageUnitLoc.storageAddress;
+
+    // debugPrint("\n");
+    // return distance;
+    FlutterMapMath flutterMapMath = FlutterMapMath();
+    double distance = flutterMapMath.distanceBetween(lat1, lon1,
+        storageUnitLoc.latitude, storageUnitLoc.longitude, "kilometers");
 
     mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit[distance] =
         storageUnitLoc.storageAddress;
 
-    debugPrint("\n");
     return distance;
   }
 
