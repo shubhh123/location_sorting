@@ -1,19 +1,18 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map_math/flutter_geo_math.dart';
-import 'package:geolocator/geolocator.dart';
+// import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert'; // For jsonDecode
-import 'package:geocoding/geocoding.dart';
+import 'package:geocoding/geocoding.dart' as geo_coding;
+// import 'package:location_sorting/main.dart';
 
 import 'package:location_sorting/model/address.dart' as customAddress;
-
 import 'package:location_sorting/model/locations.dart';
-
 import 'package:location_sorting/model/properties.dart';
 
-const fetchBackground = "fetchBackground";
+import 'package:background_location/background_location.dart';
 
-//ignore: must_be_immutable
 class LocationServices extends StatefulWidget {
   LocationServices({super.key});
 
@@ -25,30 +24,84 @@ class LocationServices extends StatefulWidget {
 }
 
 class _LocationServicesState extends State<LocationServices> {
+  bool _isLoading = true;
   List<double> sortedListWrtKm = [];
   Map<double, Properties>
       mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit = {};
-
-  List<Location> storageUnitLocations = [];
-
+  List<geo_coding.Location> storageUnitLocations = [];
   List<Locations> storageUnitLatAndLng = [];
+
+  bool isLocationServiceInitialized =
+      false; // Track if the service is initialized
+
+  Timer? debounceTimer; // Timer to debounce location updates
 
   @override
   void initState() {
     super.initState();
-    mainOperation();
+    fetchLocation();
   }
 
-  mainOperation() async {
-    getCurrentLocationOfTheUser();
+  void fetchLocation() async {
+    //if (!isLocationServiceInitialized) {
+    await BackgroundLocation.setAndroidNotification(
+      title: 'Background service is running',
+      message: 'Background location in progress',
+      icon: '@mipmap/ic_launcher',
+    );
+    await BackgroundLocation.startLocationService(distanceFilter: 20);
+
+    BackgroundLocation.getLocationUpdates((location) {
+      if (location.latitude != null && location.longitude != null) {
+        debounceLocationUpdate(
+            location.latitude!.toDouble(), location.longitude!.toDouble());
+      }
+    });
+
+    isLocationServiceInitialized = true; // Mark the service as initialized
+    //}
+  }
+
+  //This function essentially ensures that mainOperation() is called only after a short delay (1 second) following the last received location update, preventing excessive processing and improving efficiency.
+  void debounceLocationUpdate(double latitude, double longitude) {
+    if (debounceTimer?.isActive ?? false) {
+      //This is to prevent multiple rapid executions of the function
+      debounceTimer?.cancel();
+    }
+
+    //This sets up a new timer with a duration of 1 second. When this timer expires, it triggers the callback function provided as the second argument.
+    debounceTimer = Timer(
+      const Duration(seconds: 1),
+      () {
+        setState(() {
+          widget.sourceLattitude = latitude;
+          widget.sourceLongitude = longitude;
+        });
+
+        print('Inside getLocationUpdates');
+        print('''\n
+                Latitude:  ${widget.sourceLattitude}
+                Longitude: ${widget.sourceLongitude}
+              ''');
+
+        mainOperation();
+      },
+    );
+  }
+
+  Future<void> mainOperation() async {
+    setState(() {
+      _isLoading = true; // Show loading while processing data
+    });
+
+    storageUnitLatAndLng.clear();
+    mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.clear();
 
     List<Properties> properties = await constructPropertiesObject();
-
-    //debugPrint("Address List length: ${addresses.length}");
-
+    debugPrint("${properties.length}");
+    debugPrint("------------------------------");
+    debugPrint("\n");
     for (Properties property in properties) {
-      //debugPrint("Custom address query that will be sent later: ${address.formattedAddressString}");
-
       customAddress.Address address = property.address;
 
       try {
@@ -69,13 +122,19 @@ class _LocationServicesState extends State<LocationServices> {
     }
 
     sortTheMapBasedOnDistance();
+
+    debugPrint(
+        "Map size: ${mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.length}");
+
+    setState(() {
+      _isLoading = false; // Hide loading after data is processed
+    });
   }
 
-  //Future<List<Location>>
-  Future<List<Location>> getStorageUnitLocationsByForwardGeoCoding(
+  Future<List<geo_coding.Location>> getStorageUnitLocationsByForwardGeoCoding(
       String customAddressQuery) async {
-    List<Location> locations = await locationFromAddress(customAddressQuery);
-
+    List<geo_coding.Location> locations =
+        await geo_coding.locationFromAddress(customAddressQuery);
     return locations;
   }
 
@@ -112,28 +171,6 @@ class _LocationServicesState extends State<LocationServices> {
     return propertiesList;
   }
 
-  Future<void> getCurrentLocationOfTheUser() async {
-    LocationPermission permission = await Geolocator.checkPermission();
-
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      debugPrint("Location access denied. Requesting permission...");
-      await Geolocator.requestPermission();
-    } else {
-      Position currentPosition = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.best);
-
-      setState(() {
-        widget.sourceLattitude = currentPosition.latitude;
-        widget.sourceLongitude = currentPosition.longitude;
-      });
-
-      debugPrint("Latitude coordinate of the user = ${widget.sourceLattitude}");
-      debugPrint(
-          "Longitude coordinate of the user = ${widget.sourceLongitude}");
-    }
-  }
-
   double findDistanceBetweenUserToStorage(
       double lat1, double lon1, Locations storageUnitLoc) {
     FlutterMapMath flutterMapMath = FlutterMapMath();
@@ -151,16 +188,13 @@ class _LocationServicesState extends State<LocationServices> {
             .toList()
           ..sort((a, b) => a.key.compareTo(b.key));
 
-    // Clear the existing map
     mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.clear();
 
-    // Reconstruct the map from the sorted entries
     for (var entry in sortedEntries) {
       mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit[entry.key] =
           entry.value;
     }
 
-    // Iterate over the sorted map and print or process as needed
     for (var entry
         in mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit
             .entries) {
@@ -170,45 +204,66 @@ class _LocationServicesState extends State<LocationServices> {
       debugPrint(
           "Distance: $distance km, Property ID: ${property.id}, Address: ${property.address.address}, ${property.address.city}, ${property.address.state}, ${property.address.zip}");
     }
+    //mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.clear();
   }
+
+  // void handleButtonPressed() {
+  //   print("Update Location Button Pressed");
+  // }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Location"),
+        title: const Text("Nearby Storage Locations"),
         centerTitle: true,
+        // actions: [
+        //   ElevatedButton(
+        //     onPressed: handleButtonPressed,
+        //     style: ElevatedButton.styleFrom(
+        //       padding: const EdgeInsets.symmetric(horizontal: 10),
+        //     ),
+        //     child: const Text("Update Location"),
+        //   ),
+        // ],
       ),
-      body: ListView.builder(
-        itemCount:
-            mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.length,
-        itemBuilder: (context, index) {
-          // Extract distance and property from map entry at given index
-          double distance =
-              mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit.keys
-                  .elementAt(index);
-          Properties property =
-              mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit
-                  .values
-                  .elementAt(index);
+      body: _isLoading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    "Sit tight till we load nearest locations...",
+                    style: TextStyle(color: Colors.purple),
+                  )
+                ],
+              ),
+            )
+          : ListView.builder(
+              itemCount:
+                  mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit
+                      .length,
+              itemBuilder: (context, index) {
+                double distance =
+                    mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit
+                        .keys
+                        .elementAt(index);
+                Properties property =
+                    mapWithStorageAddressAndTheDistanceBetweenUserAndStorageUnit
+                        .values
+                        .elementAt(index);
 
-          // Return a ListTile representing the current entry
-          return ListTile(
-            // Display distance in the title
-            title: Text("Distance: $distance km"),
-            // Display address details in the subtitle
-            subtitle: Text(
-              "Property Details: Property ID: ${property.id}, ${property.name}",
+                return ListTile(
+                  title: Text("Distance: $distance km"),
+                  subtitle: Text(
+                    "Property Details: Property ID: ${property.id}, ${property.name}",
+                  ),
+                  onTap: () {},
+                );
+              },
             ),
-            // Handle onTap event if needed
-            onTap: () {
-              // You can add functionality here to handle tap events on the list items
-            },
-          );
-        },
-      ),
     );
   }
 }
-
-//Operable
